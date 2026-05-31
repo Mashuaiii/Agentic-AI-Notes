@@ -1,0 +1,1823 @@
+<!doctype html>
+<html>
+<head>
+<meta charset='UTF-8'><meta name='viewport' content='width=device-width initial-scale=1'>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --toc-width: 380px;
+    --toc-radius: 16px;
+    --toc-shadow: 0 8px 28px rgba(0,0,0,.12);
+    --toc-border: 1px solid rgba(0,0,0,.06);
+    --toc-accent: #4f46e5;
+    --toc-bg: rgba(250, 250, 252, .88);
+    --toc-text: #111827;
+    --toc-muted: #6b7280;
+    --btn-size: 42px;
+    --gap: 12px;
+    --header-pad: 14px;
+    --row-pad-y: 6px;
+    --row-pad-x: 8px;
+
+    /* 运行时尺寸变量（JS 可改写） */
+    --toc-current-width: var(--toc-width);
+
+    /* 折叠箭头槽位宽度 & 图标视觉大小（不影响行高） */
+    --twisty-slot: 20px;
+    --twisty-size: 14px;
+    --twisty-scale: 1.35;
+
+    /* 统一动效参数：侧栏 + 按钮一起用 */
+    --toc-motion-duration: 0.33s;
+    --toc-motion-ease: cubic-bezier(.25, .9, .25, 1);
+  }
+
+  /* 控制我们的侧栏开合 */
+  body{ --toc-open: 0; }
+  body.toc-open{ --toc-open: 1; }
+
+  @media (prefers-color-scheme: dark){
+    :root{
+      --toc-bg: rgba(24, 24, 27, .72);
+      --toc-text: #e5e7eb;
+      --toc-muted: #9ca3af;
+      --toc-border: 1px solid rgba(255,255,255,.08);
+      --toc-shadow: 0 8px 28px rgba(0,0,0,.35);
+      --toc-accent: #60a5fa;
+    }
+  }
+
+  /* ————— 侧栏 ————— */
+  #toc-sidebar{
+    position: fixed;
+    inset: var(--gap) auto var(--gap) var(--gap);
+    width: var(--toc-current-width);
+    border-radius: var(--toc-radius);
+    background: var(--toc-bg);
+    color: var(--toc-text);
+    border: var(--toc-border);
+    box-shadow: var(--toc-shadow);
+    backdrop-filter: saturate(140%) blur(10px);
+    -webkit-backdrop-filter: saturate(140%) blur(10px);
+    display: flex; flex-direction: column; overflow: hidden;
+
+    /* 关闭时左移：内容宽 + 缓冲 24px */
+    transform: translateX(calc((var(--toc-open) - 1) * (var(--toc-current-width) + 24px)));
+    opacity: calc(.2 + .8 * var(--toc-open));
+
+    transition:
+      transform var(--toc-motion-duration) var(--toc-motion-ease),
+      opacity  var(--toc-motion-duration) ease-out;
+    will-change: transform;
+    z-index: 9998;
+  }
+
+  #toc-sidebar .toc-header{
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: var(--header-pad);
+    padding-right: calc(var(--header-pad) + var(--btn-size) + 8px);
+    border-bottom: var(--toc-border);
+    font-weight: 600; letter-spacing:.2px;
+  }
+  #toc-sidebar .toc-header .subtitle{
+    font-size: 12px; color: var(--toc-muted); font-weight: 500;
+  }
+
+  .toc-tools{
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; border-bottom: var(--toc-border);
+  }
+  .toc-search{ position: relative; flex: 1 1 auto; }
+  .toc-search input{
+    width: 100%; height: 34px;
+    padding: 0 36px 0 30px;
+    border-radius: 10px;
+    border: var(--toc-border); background: rgba(255,255,255,.6);
+    color: var(--toc-text); outline: none;
+    backdrop-filter: saturate(140%) blur(6px);
+    -webkit-appearance: none; appearance: none;
+    font-size: 13px; line-height: 1.25; font-family: inherit;
+  }
+  .toc-search input::placeholder{
+    font-size: 13px; color: var(--toc-muted); opacity: 1;
+  }
+  .toc-search input::-webkit-search-cancel-button,
+  .toc-search input::-webkit-search-decoration{
+    -webkit-appearance:none; appearance:none; display:none;
+  }
+  .toc-search input::-ms-clear{
+    display:none; width:0; height:0;
+  }
+  @media (prefers-color-scheme: dark){
+    .toc-search input{ background: rgba(0,0,0,.2); }
+  }
+  
+  /* 【关键修改】提升图标层级和颜色深度 */
+  .toc-search .icon{
+    position: absolute; 
+    left: 8px; 
+    top: 50%; 
+    transform: translateY(-50%);
+    width: 16px; 
+    height: 16px; 
+    
+    /* 1. 使用正文颜色而非灰色，!important 强制生效 */
+    color: var(--toc-text) !important; 
+    
+    /* 2. 保持一点点通透感，避免纯黑太死板，0.8 接近文字视觉 */
+    opacity: 0.8; 
+    
+    /* 3. 关键：提高层级，防止被 Input 的背景色遮挡变淡 */
+    z-index: 10; 
+    
+    pointer-events: none;
+  }
+
+  /* 清除按钮：小圆点，点击区比输入框矮一圈 */
+  .toc-search .clear{
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--toc-muted);
+    cursor: pointer;
+    transition: opacity .15s ease, background-color .15s ease;
+    opacity: 0;
+    pointer-events: auto; /* 修正：原来可能有点透传问题 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+    z-index: 11; /* 确保在最上层 */
+  }
+  .toc-search input:not(:placeholder-shown) + .clear{
+    opacity: 1;
+  }
+  .toc-search .clear:hover{
+    background: rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    .toc-search .clear:hover{
+      background: rgba(255,255,255,.08);
+    }
+  }
+
+  .toc-actions{ display: inline-flex; gap: 6px; }
+  .icon-btn{
+    width: 34px; height: 34px; border-radius: 10px;
+    display: inline-flex; align-items:center; justify-content:center;
+    border: var(--toc-border); background: var(--toc-bg); color: var(--toc-text);
+    box-shadow: var(--toc-shadow); cursor: pointer;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .icon-btn:hover{ transform: translateY(-1px); }
+
+  /* 树形目录 */
+  #toc-nav{
+    overflow: auto; padding: 6px 8px 12px 6px;
+  }
+  
+  /* ========== 强制移除所有黑色圆点 ========== */
+  #toc-tree,
+  #toc-tree ul,
+  #toc-tree li {
+    list-style: none !important;
+    list-style-type: none !important;
+  }
+  
+  #toc-tree li::marker,
+  #toc-tree ul::marker {
+    display: none !important;
+    content: "" !important;
+  }
+  /* ======================================== */
+  
+  #toc-tree ul {
+    margin: 0;
+    padding-left: 12px;
+  }
+  
+  #toc-tree {
+    padding: 6px 8px 10px;
+    margin: 0;
+  }
+  
+  #toc-tree li{
+    margin: 2px 0; border-radius: 10px; line-height: 1.25;
+  }
+
+  /* grid 固定第 1 列为 twisty 槽位，保证同层级标题左对齐 */
+  #toc-tree li > .row{
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--twisty-slot) minmax(0,1fr);
+    column-gap: 6px;
+    align-items: center;
+    border-radius: 10px;
+    padding: var(--row-pad-y) var(--row-pad-x);
+    transition: background-color .2s ease, color .2s ease;
+    cursor: pointer;
+  }
+  #toc-tree li > .row > .twisty{ grid-column: 1; }
+  #toc-tree li > .row > a{ grid-column: 2; }
+
+  #toc-tree li > .row:hover{
+    background: rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    #toc-tree li > .row:hover{ background: rgba(255,255,255,.06); }
+  }
+
+  #toc-tree a{
+    flex: 1 1 auto; text-decoration: none; color: var(--toc-text);
+    font-size: 13px; outline: none; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  #toc-tree a:focus-visible{
+    box-shadow: 0 0 0 3px rgba(99,102,241,.25);
+  }
+  #toc-tree ul{ padding-left: 12px; }
+
+  /* 折叠按钮 */
+  .twisty{
+    width: var(--twisty-slot);
+    height: var(--twisty-slot);
+    display: inline-flex; align-items:center; justify-content:center;
+    border: none; background: transparent; color: var(--toc-muted);
+    border-radius: 6px; cursor: pointer;
+    transition: background-color .2s ease, color .2s ease;
+    flex: 0 0 var(--twisty-slot);
+  }
+  .twisty:hover{
+    background: rgba(0,0,0,.06); color: var(--toc-text);
+  }
+  @media (prefers-color-scheme: dark){
+    .twisty:hover{ background: rgba(255,255,255,.08); }
+  }
+  .twisty svg{
+    width: var(--twisty-size); height: var(--twisty-size);
+    transform-origin: 50% 50%;
+    transition: transform .2s ease;
+    display: block;
+  }
+  .has-children > .row .twisty svg{
+    transform: rotate(0deg) scale(var(--twisty-scale));
+  }
+  .collapsed  > .row .twisty svg{
+    transform: rotate(-90deg) scale(var(--twisty-scale));
+  }
+  .collapsed > ul{ display: none; }
+
+  .lv-1 > .row a{ font-weight: 600; }
+
+  /* 激活态 */
+  #toc-tree .row.is-active{
+    background: rgba(99,102,241,.08); border-radius: 10px;
+  }
+  #toc-tree .row.is-active a{
+    color: var(--toc-accent); font-weight: 700;
+  }
+  #toc-tree .row.is-active::after{
+    content: none !important; display: none !important;
+  }
+
+  #toc-sidebar mark{
+    background: rgba(99,102,241,.18); color: inherit;
+    border-radius: 4px; padding: 0 2px;
+  }
+
+  /* 调宽把手：右侧“幽灵把手” */
+  .toc-resizer{
+    position: absolute; top: 0; right: -6px;
+    width: 12px; height: 100%;
+    cursor: col-resize;
+    display: flex; align-items: center; justify-content: flex-end;
+    touch-action: none;
+    opacity: 0; transition: opacity .18s ease;
+    z-index: 10000;
+    pointer-events: auto;
+  }
+  #toc-sidebar:hover .toc-resizer{ opacity: .55; }
+  .toc-resizer:hover{ opacity: 1; }
+  .toc-resizer::before{
+    content:""; width: 2px; height: 52px; margin-right: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to bottom, rgba(0,0,0,.12), rgba(0,0,0,.05));
+    box-shadow: 0 0 0 1px rgba(255,255,255,.25) inset;
+  }
+  .toc-resizer:hover::before{ height: 64px; }
+  @media (prefers-color-scheme: dark){
+    .toc-resizer::before{
+      background: linear-gradient(to bottom, rgba(255,255,255,.22), rgba(255,255,255,.08));
+      box-shadow: 0 0 0 1px rgba(0,0,0,.35) inset;
+    }
+  }
+
+  /* 浮动开关按钮（与侧栏 transform 同步） */
+  #toc-toggle{
+    position: fixed; z-index: 9999;
+    width: var(--btn-size); height: var(--btn-size);
+    border-radius: 12px;
+    border: var(--toc-border); box-shadow: var(--toc-shadow);
+    background: var(--toc-bg); color: var(--toc-text);
+    display: inline-flex; align-items:center; justify-content:center;
+    cursor: pointer;
+    left: var(--gap);
+    top: calc(var(--gap) + var(--header-pad));
+
+    transform: translateX(calc(var(--toc-open) * (var(--toc-current-width) - var(--header-pad) - var(--btn-size))));
+    transition:
+      transform           var(--toc-motion-duration) var(--toc-motion-ease),
+      box-shadow          0.18s ease,
+      background-color    0.18s ease,
+      filter              0.18s ease;
+    will-change: transform;
+  }
+  /* hover 不再改 transform，避免和开合动画打架 */
+  #toc-toggle:hover{
+    box-shadow: 0 10px 30px rgba(0,0,0,.18);
+    filter: brightness(1.03);
+  }
+  #toc-toggle svg{ width: 22px; height: 22px; }
+
+  body.resizing #toc-sidebar,
+  body.resizing #toc-toggle{
+    transition: none !important;
+  }
+  body.resizing{
+    cursor: col-resize; user-select: none;
+  }
+
+  @media (max-width: 1024px){
+    :root{
+      --gap: 10px;
+      --toc-current-width: min(86vw, 360px);
+    }
+    #toc-sidebar{ inset: var(--gap); }
+    .toc-resizer{ display: none; }
+  }
+
+  body.toc-open #write{
+    margin-left: calc(var(--toc-current-width) + 28px) !important;
+  }
+
+  @media print{
+    #toc-sidebar, #toc-toggle{ display:none !important; }
+  }
+
+  html.no-smooth{ scroll-behavior: auto !important; }
+
+/* ==========================
+   TOC Footer
+   ========================== */
+
+  #toc-footer{
+    margin-top:auto;
+    padding:12px 14px;
+
+    border-top:var(--toc-border);
+
+    text-align:center;
+
+    font-size:11px;
+    line-height:1.5;
+
+    color:var(--toc-muted);
+
+    background:rgba(0,0,0,.015);
+
+    flex-shrink:0;
+  }
+
+  #toc-footer .author{
+    font-size:13px;
+    font-weight:600;
+    color:var(--toc-text);
+  }
+
+  #toc-footer .date{
+    margin-top:2px;
+    opacity:.8;
+  }
+
+  @media (prefers-color-scheme: dark){
+    #toc-footer{
+      background:rgba(255,255,255,.03);
+    }
+  }
+</style>
+
+<link href='https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700,700italic&subset=latin,cyrillic-ext,cyrillic,latin-ext' rel='stylesheet' type='text/css' /><style type='text/css'>html {overflow-x: initial !important;}:root { --bg-color:#ffffff; --text-color:#333333; --select-text-bg-color:#B5D6FC; --select-text-font-color:auto; --monospace:"Lucida Console",Consolas,"Courier",monospace; --title-bar-height:20px; }
+.mac-os-11 { --title-bar-height:28px; }
+html { font-size: 14px; background-color: var(--bg-color); color: var(--text-color); font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, h4, h5 { white-space: pre-wrap; }
+body { margin: 0px; padding: 0px; height: auto; inset: 0px; font-size: 1rem; line-height: 1.42857; overflow-x: hidden; background: inherit; tab-size: 4; }
+iframe { margin: auto; }
+a.url { word-break: break-all; }
+a:active, a:hover { outline: 0px; }
+.in-text-selection, ::selection { text-shadow: none; background: var(--select-text-bg-color); color: var(--select-text-font-color); }
+#write { margin: 0px auto; height: auto; width: inherit; word-break: normal; overflow-wrap: break-word; position: relative; white-space: normal; overflow-x: visible; padding-top: 36px; }
+#write.first-line-indent p { text-indent: 2em; }
+#write.first-line-indent li p, #write.first-line-indent p * { text-indent: 0px; }
+#write.first-line-indent li { margin-left: 2em; }
+.for-image #write { padding-left: 8px; padding-right: 8px; }
+body.typora-export { padding-left: 30px; padding-right: 30px; }
+.typora-export .footnote-line, .typora-export li, .typora-export p { white-space: pre-wrap; }
+.typora-export .task-list-item input { pointer-events: none; }
+@media screen and (max-width: 500px) {
+  body.typora-export { padding-left: 0px; padding-right: 0px; }
+  #write { padding-left: 20px; padding-right: 20px; }
+}
+#write li > figure:last-child { margin-bottom: 0.5rem; }
+#write ol, #write ul { position: relative; }
+img { max-width: 100%; vertical-align: middle; image-orientation: from-image; }
+button, input, select, textarea { color: inherit; font: inherit; }
+input[type="checkbox"], input[type="radio"] { line-height: normal; padding: 0px; }
+*, ::after, ::before { box-sizing: border-box; }
+#write h1, #write h2, #write h3, #write h4, #write h5, #write h6, #write p, #write pre { width: inherit; }
+#write h1, #write h2, #write h3, #write h4, #write h5, #write h6, #write p { position: relative; }
+p { line-height: inherit; }
+h1, h2, h3, h4, h5, h6 { break-after: avoid-page; break-inside: avoid; orphans: 4; }
+p { orphans: 4; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.8rem; }
+h3 { font-size: 1.6rem; }
+h4 { font-size: 1.4rem; }
+h5 { font-size: 1.2rem; }
+h6 { font-size: 1rem; }
+.md-math-block, .md-rawblock, h1, h2, h3, h4, h5, h6, p { margin-top: 1rem; margin-bottom: 1rem; }
+.hidden { display: none; }
+.md-blockmeta { color: rgb(204, 204, 204); font-weight: 700; font-style: italic; }
+a { cursor: pointer; }
+sup.md-footnote { padding: 2px 4px; background-color: rgba(238, 238, 238, 0.7); color: rgb(85, 85, 85); border-radius: 4px; cursor: pointer; }
+sup.md-footnote a, sup.md-footnote a:hover { color: inherit; text-transform: inherit; text-decoration: inherit; }
+#write input[type="checkbox"] { cursor: pointer; width: inherit; height: inherit; }
+figure { overflow-x: auto; margin: 1.2em 0px; max-width: calc(100% + 16px); padding: 0px; }
+figure > table { margin: 0px; }
+thead, tr { break-inside: avoid; break-after: auto; }
+thead { display: table-header-group; }
+table { border-collapse: collapse; border-spacing: 0px; width: 100%; overflow: auto; break-inside: auto; text-align: left; }
+table.md-table td { min-width: 32px; }
+.CodeMirror-gutters { border-right: 0px; background-color: inherit; }
+.CodeMirror-linenumber { user-select: none; }
+.CodeMirror { text-align: left; }
+.CodeMirror-placeholder { opacity: 0.3; }
+.CodeMirror pre { padding: 0px 4px; }
+.CodeMirror-lines { padding: 0px; }
+div.hr:focus { cursor: none; }
+#write pre { white-space: pre-wrap; }
+#write.fences-no-line-wrapping pre { white-space: pre; }
+#write pre.ty-contain-cm { white-space: normal; }
+.CodeMirror-gutters { margin-right: 4px; }
+.md-fences { font-size: 0.9rem; display: block; break-inside: avoid; text-align: left; overflow: visible; white-space: pre; background: inherit; position: relative !important; }
+.md-fences-adv-panel { width: 100%; margin-top: 10px; text-align: center; padding-top: 0px; padding-bottom: 8px; overflow-x: auto; }
+#write .md-fences.mock-cm { white-space: pre-wrap; }
+.md-fences.md-fences-with-lineno { padding-left: 0px; }
+#write.fences-no-line-wrapping .md-fences.mock-cm { white-space: pre; overflow-x: auto; }
+.md-fences.mock-cm.md-fences-with-lineno { padding-left: 8px; }
+.CodeMirror-line, twitterwidget { break-inside: avoid; }
+svg { break-inside: avoid; }
+.footnotes { opacity: 0.8; font-size: 0.9rem; margin-top: 1em; margin-bottom: 1em; }
+.footnotes + .footnotes { margin-top: 0px; }
+.md-reset { margin: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: top; background: 0px 0px; text-decoration: none; text-shadow: none; float: none; position: static; width: auto; height: auto; white-space: nowrap; cursor: inherit; -webkit-tap-highlight-color: transparent; line-height: normal; font-weight: 400; text-align: left; box-sizing: content-box; direction: ltr; }
+li div { padding-top: 0px; }
+blockquote { margin: 1rem 0px; }
+li .mathjax-block, li p { margin: 0.5rem 0px; }
+li blockquote { margin: 1rem 0px; }
+li { margin: 0px; position: relative; }
+blockquote > :last-child { margin-bottom: 0px; }
+blockquote > :first-child, li > :first-child { margin-top: 0px; }
+.footnotes-area { color: rgb(136, 136, 136); margin-top: 0.714rem; padding-bottom: 0.143rem; white-space: normal; }
+#write .footnote-line { white-space: pre-wrap; }
+@media print {
+  body, html { border: 1px solid transparent; height: 99%; break-after: avoid; break-before: avoid; font-variant-ligatures: no-common-ligatures; }
+  #write { margin-top: 0px; border-color: transparent !important; padding-top: 0px !important; padding-bottom: 0px !important; }
+  .typora-export * { -webkit-print-color-adjust: exact; }
+  .typora-export #write { break-after: avoid; }
+  .typora-export #write::after { height: 0px; }
+  .is-mac table { break-inside: avoid; }
+  #write > p:nth-child(1) { margin-top: 0px; }
+  .typora-export-show-outline .typora-export-sidebar { display: none; }
+  figure { overflow-x: visible; }
+}
+.footnote-line { margin-top: 0.714em; font-size: 0.7em; }
+a img, img a { cursor: pointer; }
+pre.md-meta-block { font-size: 0.8rem; min-height: 0.8rem; white-space: pre-wrap; background: rgb(204, 204, 204); display: block; overflow-x: hidden; }
+p > .md-image:only-child:not(.md-img-error) img, p > img:only-child { display: block; margin: auto; }
+#write.first-line-indent p > .md-image:only-child:not(.md-img-error) img { left: -2em; position: relative; }
+p > .md-image:only-child { display: inline-block; width: 100%; }
+#write .MathJax_Display { margin: 0.8em 0px 0px; }
+.md-math-block { width: 100%; }
+.md-math-block:not(:empty)::after { display: none; }
+.MathJax_ref { fill: currentcolor; }
+[contenteditable="true"]:active, [contenteditable="true"]:focus, [contenteditable="false"]:active, [contenteditable="false"]:focus { outline: 0px; box-shadow: none; }
+.md-task-list-item { position: relative; list-style-type: none; }
+.task-list-item.md-task-list-item { padding-left: 0px; }
+.md-task-list-item > input { position: absolute; top: 0px; left: 0px; margin-left: -1.2em; margin-top: calc(1em - 10px); border: none; }
+.math { font-size: 1rem; }
+.md-toc { min-height: 3.58rem; position: relative; font-size: 0.9rem; border-radius: 10px; }
+.md-toc-content { position: relative; margin-left: 0px; }
+.md-toc-content::after, .md-toc::after { display: none; }
+.md-toc-item { display: block; color: rgb(65, 131, 196); }
+.md-toc-item a { text-decoration: none; }
+.md-toc-inner:hover { text-decoration: underline; }
+.md-toc-inner { display: inline-block; cursor: pointer; }
+.md-toc-h1 .md-toc-inner { margin-left: 0px; font-weight: 700; }
+.md-toc-h2 .md-toc-inner { margin-left: 2em; }
+.md-toc-h3 .md-toc-inner { margin-left: 4em; }
+.md-toc-h4 .md-toc-inner { margin-left: 6em; }
+.md-toc-h5 .md-toc-inner { margin-left: 8em; }
+.md-toc-h6 .md-toc-inner { margin-left: 10em; }
+@media screen and (max-width: 48em) {
+  .md-toc-h3 .md-toc-inner { margin-left: 3.5em; }
+  .md-toc-h4 .md-toc-inner { margin-left: 5em; }
+  .md-toc-h5 .md-toc-inner { margin-left: 6.5em; }
+  .md-toc-h6 .md-toc-inner { margin-left: 8em; }
+}
+a.md-toc-inner { font-size: inherit; font-style: inherit; font-weight: inherit; line-height: inherit; }
+.footnote-line a:not(.reversefootnote) { color: inherit; }
+.reversefootnote { font-family: ui-monospace, sans-serif; }
+.md-attr { display: none; }
+.md-fn-count::after { content: "."; }
+code, pre, samp, tt { font-family: var(--monospace); }
+kbd { margin: 0px 0.1em; padding: 0.1em 0.6em; font-size: 0.8em; color: rgb(36, 39, 41); background: rgb(255, 255, 255); border: 1px solid rgb(173, 179, 185); border-radius: 3px; box-shadow: rgba(12, 13, 14, 0.2) 0px 1px 0px, rgb(255, 255, 255) 0px 0px 0px 2px inset; white-space: nowrap; vertical-align: middle; }
+.md-comment { color: rgb(162, 127, 3); opacity: 0.6; font-family: var(--monospace); }
+code { text-align: left; vertical-align: initial; }
+a.md-print-anchor { white-space: pre !important; border-width: initial !important; border-style: none !important; border-color: initial !important; display: inline-block !important; position: absolute !important; width: 1px !important; right: 0px !important; outline: 0px !important; background: 0px 0px !important; text-decoration: initial !important; text-shadow: initial !important; }
+.os-windows.monocolor-emoji .md-emoji { font-family: "Segoe UI Symbol", sans-serif; }
+.md-diagram-panel > svg { max-width: 100%; }
+[lang="flow"] svg, [lang="mermaid"] svg { max-width: 100%; height: auto; }
+[lang="mermaid"] .node text { font-size: 1rem; }
+table tr th { border-bottom: 0px; }
+video { max-width: 100%; display: block; margin: 0px auto; }
+iframe { max-width: 100%; width: 100%; border: none; }
+.highlight td, .highlight tr { border: 0px; }
+mark { background: rgb(255, 255, 0); color: rgb(0, 0, 0); }
+.md-html-inline .md-plain, .md-html-inline strong, mark .md-inline-math, mark strong { color: inherit; }
+.md-expand mark .md-meta { opacity: 0.3 !important; }
+mark .md-meta { color: rgb(0, 0, 0); }
+@media print {
+  .typora-export h1, .typora-export h2, .typora-export h3, .typora-export h4, .typora-export h5, .typora-export h6 { break-inside: avoid; }
+}
+.md-diagram-panel .messageText { stroke: none !important; }
+.md-diagram-panel .start-state { fill: var(--node-fill); }
+.md-diagram-panel .edgeLabel rect { opacity: 1 !important; }
+.md-fences.md-fences-math { font-size: 1em; }
+.md-fences-advanced:not(.md-focus) { padding: 0px; white-space: nowrap; border: 0px; }
+.md-fences-advanced:not(.md-focus) { background: inherit; }
+.typora-export-show-outline .typora-export-content { max-width: 1440px; margin: auto; display: flex; flex-direction: row; }
+.typora-export-sidebar { width: 300px; font-size: 0.8rem; margin-top: 80px; margin-right: 18px; }
+.typora-export-show-outline #write { --webkit-flex:2; flex: 2 1 0%; }
+.typora-export-sidebar .outline-content { position: fixed; top: 0px; max-height: 100%; overflow: hidden auto; padding-bottom: 30px; padding-top: 60px; width: 300px; }
+@media screen and (max-width: 1024px) {
+  .typora-export-sidebar, .typora-export-sidebar .outline-content { width: 240px; }
+}
+@media screen and (max-width: 800px) {
+  .typora-export-sidebar { display: none; }
+}
+.outline-content li, .outline-content ul { margin-left: 0px; margin-right: 0px; padding-left: 0px; padding-right: 0px; list-style: none; overflow-wrap: anywhere; }
+.outline-content ul { margin-top: 0px; margin-bottom: 0px; }
+.outline-content strong { font-weight: 400; }
+.outline-expander { width: 1rem; height: 1.42857rem; position: relative; display: table-cell; vertical-align: middle; cursor: pointer; padding-left: 4px; }
+.outline-expander::before { content: ""; position: relative; font-family: Ionicons; display: inline-block; font-size: 8px; vertical-align: middle; }
+.outline-item { padding-top: 3px; padding-bottom: 3px; cursor: pointer; }
+.outline-expander:hover::before { content: ""; }
+.outline-h1 > .outline-item { padding-left: 0px; }
+.outline-h2 > .outline-item { padding-left: 1em; }
+.outline-h3 > .outline-item { padding-left: 2em; }
+.outline-h4 > .outline-item { padding-left: 3em; }
+.outline-h5 > .outline-item { padding-left: 4em; }
+.outline-h6 > .outline-item { padding-left: 5em; }
+.outline-label { cursor: pointer; display: table-cell; vertical-align: middle; text-decoration: none; color: inherit; }
+.outline-label:hover { text-decoration: underline; }
+.outline-item:hover { border-color: rgb(245, 245, 245); background-color: var(--item-hover-bg-color); }
+.outline-item:hover { margin-left: -28px; margin-right: -28px; border-left: 28px solid transparent; border-right: 28px solid transparent; }
+.outline-item-single .outline-expander::before, .outline-item-single .outline-expander:hover::before { display: none; }
+.outline-item-open > .outline-item > .outline-expander::before { content: ""; }
+.outline-children { display: none; }
+.info-panel-tab-wrapper { display: none; }
+.outline-item-open > .outline-children { display: block; }
+.typora-export .outline-item { padding-top: 1px; padding-bottom: 1px; }
+.typora-export .outline-item:hover { margin-right: -8px; border-right: 8px solid transparent; }
+.typora-export .outline-expander::before { content: "+"; font-family: inherit; top: -1px; }
+.typora-export .outline-expander:hover::before, .typora-export .outline-item-open > .outline-item > .outline-expander::before { content: "−"; }
+.typora-export-collapse-outline .outline-children { display: none; }
+.typora-export-collapse-outline .outline-item-open > .outline-children, .typora-export-no-collapse-outline .outline-children { display: block; }
+.typora-export-no-collapse-outline .outline-expander::before { content: "" !important; }
+.typora-export-show-outline .outline-item-active > .outline-item .outline-label { font-weight: 700; }
+.md-inline-math-container mjx-container { zoom: 0.95; }
+mjx-container { break-inside: avoid; }
+
+
+/* meyer reset -- http://meyerweb.com/eric/tools/css/reset/ , v2.0 | 20110126 | License: none (public domain) */
+
+@include-when-export url(https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700,700italic&subset=latin,cyrillic-ext,cyrillic,latin-ext);
+
+/* =========== */
+
+/* pt-serif-regular - latin */
+/* pt-serif-italic - latin */
+/* pt-serif-700 - latin */
+/* pt-serif-700italic - latin */
+:root {
+	--active-file-bg-color: #dadada;
+	--active-file-bg-color: rgba(32, 43, 51, 0.63);
+	--active-file-text-color: white;
+	--bg-color: #f3f2ee;
+	--text-color: #1f0909;
+	--control-text-color: #444;
+	--rawblock-edit-panel-bd: #e5e5e5;
+
+	--select-text-bg-color: rgba(32, 43, 51, 0.63);
+  --select-text-font-color: white;
+}
+
+pre {
+	--select-text-bg-color: #36284e;
+	--select-text-font-color: #fff;
+}
+
+html {
+	font-size: 16px;
+	-webkit-font-smoothing: antialiased;
+}
+
+html, body {
+	background-color: #f3f2ee;
+	font-family: "PT Serif", 'Times New Roman', Times, serif;
+	color: #1f0909;
+	line-height: 1.5em;
+}
+
+/*#write {
+	overflow-x: auto;
+    max-width: initial;
+	padding-left: calc(50% - 17em);
+    padding-right: calc(50% - 17em);
+}
+
+@media (max-width: 36em) {
+ 	#write {
+ 		padding-left: 1em;
+    	padding-right: 1em;
+ 	}
+}*/
+
+#write {
+	max-width: 40em;
+}
+
+@media only screen and (min-width: 1400px) {
+	#write {
+			max-width: 914px;
+	}
+}
+
+ol li {
+	list-style-type: decimal;
+	list-style-position: outside;
+}
+ul li {
+	list-style-type: disc;
+	list-style-position: outside;
+}
+
+ol,
+ul {
+	list-style: none;
+}
+
+blockquote,
+q {
+	quotes: none;
+}
+blockquote:before,
+blockquote:after,
+q:before,
+q:after {
+	content: '';
+	content: none;
+}
+table {
+	border-collapse: collapse;
+	border-spacing: 0;
+}
+/* styles */
+
+/* ====== */
+
+/* headings */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-weight: bold;
+}
+h1 {
+	font-size: 1.875em;
+	/*30 / 16*/
+	line-height: 1.6em;
+	/* 48 / 30*/
+	margin-top: 2em;
+}
+h2,
+h3 {
+	font-size: 1.3125em;
+	/*21 / 16*/
+	line-height: 1.15;
+	/*24 / 21*/
+	margin-top: 2.285714em;
+	/*48 / 21*/
+	margin-bottom: 1.15em;
+	/*24 / 21*/
+}
+h3 {
+	font-weight: normal;
+}
+h4 {
+	font-size: 1.125em;
+	/*18 / 16*/
+	margin-top: 2.67em;
+	/*48 / 18*/
+}
+h5,
+h6 {
+	font-size: 1em;
+	/*16*/
+}
+h1 {
+	border-bottom: 1px solid;
+	margin-bottom: 1.875em;
+	padding-bottom: 0.8125em;
+}
+/* links */
+
+a {
+	text-decoration: none;
+	color: #065588;
+}
+a:hover,
+a:active {
+	text-decoration: underline;
+}
+/* block spacing */
+
+p,
+blockquote,
+.md-fences {
+	margin-bottom: 1.5em;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	margin-bottom: 1.5em;
+}
+/* blockquote */
+
+blockquote {
+	font-style: italic;
+	border-left: 5px solid;
+	margin-left: 2em;
+	padding-left: 1em;
+}
+/* lists */
+
+ul,
+ol {
+	margin: 0 0 1.5em 1.5em;
+}
+/* tables */
+.md-meta,.md-before, .md-after {
+	color:#999;
+}
+
+table {
+	margin-bottom: 1.5em;
+	/*24 / 16*/
+	font-size: 1em;
+	/* width: 100%; */
+}
+thead th,
+tfoot th {
+	padding: .25em .25em .25em .4em;
+	text-transform: uppercase;
+}
+th {
+	text-align: left;
+}
+td {
+	vertical-align: top;
+	padding: .25em .25em .25em .4em;
+}
+
+code,
+.md-fences {
+	background-color: #dadada;
+}
+
+code {
+	padding-left: 2px;
+	padding-right: 2px;
+}
+
+.md-fences {
+	margin-left: 2em;
+	margin-bottom: 3em;
+	padding-left: 1ch;
+	padding-right: 1ch;
+}
+
+pre,
+code,
+tt {
+	font-size: .875em;
+	line-height: 1.714285em;
+}
+/* some fixes */
+
+h1 {
+	line-height: 1.3em;
+	font-weight: normal;
+	margin-bottom: 0.5em;
+}
+
+p + ul,
+p + ol{
+	margin-top: .5em;
+}
+
+h3 + ul,
+h4 + ul,
+h5 + ul,
+h6 + ul,
+h3 + ol,
+h4 + ol,
+h5 + ol,
+h6 + ol {
+	margin-top: .5em;
+}
+
+li > ul,
+li > ol {
+	margin-top: inherit;
+	margin-bottom: 0;
+}
+
+li ol>li {
+	list-style-type: lower-alpha;
+}
+
+li li ol>li{
+	list-style-type: lower-roman;
+}
+
+h2,
+h3 {
+	margin-bottom: .75em;
+}
+hr {
+	border-top: none;
+	border-right: none;
+	border-bottom: 1px solid;
+	border-left: none;
+}
+h1 {
+	border-color: #c5c5c5;
+}
+blockquote {
+	border-color: #bababa;
+	color: #656565;
+}
+
+blockquote ul,
+blockquote ol {
+	margin-left:0;
+}
+
+.ty-table-edit {
+	background-color: transparent;
+}
+thead {
+	background-color: #dadada;
+}
+tr:nth-child(even) {
+	background: #e8e7e7;
+}
+hr {
+	border-color: #c5c5c5;
+}
+.task-list{
+	padding-left: 1rem;
+}
+
+.md-task-list-item {
+	padding-left: 1.5rem;
+	list-style-type: none;
+}
+
+.md-task-list-item > input:before {
+	content: '\221A';
+	display: inline-block;
+	width: 1.25rem;
+  	height: 1.6rem;
+	vertical-align: middle;
+	text-align: center;
+	color: #ddd;
+	background-color: #F3F2EE;
+}
+
+.md-task-list-item > input:checked:before,
+.md-task-list-item > input[checked]:before{
+	color: inherit;
+}
+
+#write pre.md-meta-block {
+	min-height: 1.875rem;
+	color: #555;
+	border: 0px;
+	background: transparent;
+	margin-top: -4px;
+	margin-left: 1em;
+	margin-top: 1em;
+}
+
+.md-image>.md-meta {
+	color: #9B5146;
+}
+
+.md-image>.md-meta{
+	font-family: Menlo, 'Ubuntu Mono', Consolas, 'Courier New', 'Microsoft Yahei', 'Hiragino Sans GB', 'WenQuanYi Micro Hei', serif;
+}
+
+
+#write>h3.md-focus:before{
+	left: -1.5rem;
+	color:#999;
+	border-color:#999;
+}
+#write>h4.md-focus:before{
+	left: -1.5rem;
+	top: .25rem;
+	color:#999;
+	border-color:#999;
+}
+#write>h5.md-focus:before{
+	left: -1.5rem;
+	top: .0.3125rem;
+	color:#999;
+	border-color:#999;
+}
+#write>h6.md-focus:before{
+	left: -1.5rem;
+	top: 0.3125rem;
+	color:#999;
+	border-color:#999;
+}
+
+.md-toc:focus .md-toc-content{
+	margin-top: 19px;
+}
+
+.md-toc-content:empty:before{
+	color: #065588;
+}
+.md-toc-item {
+	color: #065588;
+}
+#write div.md-toc-tooltip {
+	background-color: #f3f2ee;
+}
+
+#typora-sidebar {
+	background-color: #f3f2ee;
+	-webkit-box-shadow: 0 6px 12px rgba(0, 0, 0, 0.375);
+  	box-shadow: 0 6px 12px rgba(0, 0, 0, 0.375);
+}
+
+.pin-outline #typora-sidebar {
+	background: inherit;
+	box-shadow: none;
+	border-right: 1px dashed;
+}
+
+.pin-outline #typora-sidebar:hover .outline-title-wrapper {
+	border-left:1px dashed;
+}
+
+.outline-item:hover {
+  background-color: #dadada;
+  border-left: 28px solid #dadada;
+  border-right: 18px solid #dadada;
+}
+
+.typora-node .outline-item:hover {
+  	border-right: 28px solid #dadada;
+}
+
+.outline-expander:before {
+  content: "\f0da";
+  font-family: FontAwesome;
+  font-size:14px;
+  top: 1px;
+}
+
+.outline-expander:hover:before,
+.outline-item-open>.outline-item>.outline-expander:before {
+  content: "\f0d7";
+}
+
+.modal-content {
+	background-color: #f3f2ee;
+}
+
+.auto-suggest-container ul li {
+	list-style-type: none;
+}
+
+/** UI for electron */
+
+.megamenu-menu,
+#top-titlebar, #top-titlebar *,
+.megamenu-content {
+	background: #f3f2ee;
+	color: #1f0909;
+}
+
+.megamenu-menu-header {
+	border-bottom: 1px dashed #202B33;
+}
+
+.megamenu-menu {
+	box-shadow: none;
+	border-right: 1px dashed;
+}
+
+header, .context-menu, .megamenu-content, footer {
+	font-family: "PT Serif", 'Times New Roman', Times, serif;
+    color: #1f0909;
+}
+
+#megamenu-back-btn {
+	color: #1f0909;
+	border-color: #1f0909;
+}
+
+.megamenu-menu-header #megamenu-menu-header-title:before {
+	color: #1f0909;
+}
+
+.megamenu-menu-list li a:hover, .megamenu-menu-list li a.active {
+	color: inherit;
+	background-color: #e8e7df;
+}
+
+.long-btn:hover {
+	background-color: #e8e7df;
+}
+
+#recent-file-panel tbody tr:nth-child(2n-1) {
+    background-color: transparent !important;
+}
+
+.megamenu-menu-panel tbody tr:hover td:nth-child(2) {
+    color: inherit;
+}
+
+.megamenu-menu-panel .btn {
+	background-color: #D2D1D1;
+}
+
+.btn-default {
+	background-color: transparent;
+}
+
+.typora-sourceview-on #toggle-sourceview-btn,
+.ty-show-word-count #footer-word-count {
+	background: #c7c5c5;
+}
+
+#typora-quick-open {
+    background-color: inherit;
+}
+
+.md-diagram-panel {
+	margin-top: 8px;
+}
+
+.file-list-item-file-name {
+	font-weight: initial;
+}
+
+.file-list-item-summary {
+	opacity: 1;
+}
+
+.file-list-item {
+	color: #777;
+}
+
+.file-list-item.active {
+	background-color: inherit;
+	color: black;
+}
+
+.ty-side-sort-btn.active {
+	background-color: inherit;
+}
+
+.file-list-item.active .file-list-item-file-name  {
+	font-weight: bold;
+}
+
+.file-list-item{
+    opacity:1 !important;
+}
+
+.file-library-node.active>.file-node-background{
+	background-color: rgba(32, 43, 51, 0.63);
+	background-color: var(--active-file-bg-color);
+}
+
+.file-tree-node.active>.file-node-content{
+	color: white;
+	color: var(--active-file-text-color);
+}
+
+.md-task-list-item>input {
+	margin-left: -1.7em;
+	margin-top: calc(1rem - 12px);
+	-webkit-appearance: button;
+}
+
+input {
+	border: 1px solid #aaa;
+}
+
+.megamenu-menu-header #megamenu-menu-header-title,
+.megamenu-menu-header:hover, 
+.megamenu-menu-header:focus {
+	color: inherit;
+}
+
+.dropdown-menu .divider {
+	border-color: #e5e5e5;
+	opacity: 1;
+}
+
+/* https://github.com/typora/typora-issues/issues/2046 */
+.os-windows-7 strong,
+.os-windows-7 strong  {
+	font-weight: 760;
+}
+
+.ty-preferences .btn-default {
+	background: transparent;
+}
+
+.ty-preferences .window-header {
+	border-bottom: 1px dashed #202B33;
+	box-shadow: none;
+}
+
+#sidebar-loading-template, #sidebar-loading-template.file-list-item {
+	color: #777;
+}
+
+.searchpanel-search-option-btn.active {
+	background: #777;
+	color: white;
+}
+
+.export-detail, .light .export-detail, 
+.light .export-item.active, 
+.light .export-items-list-control {
+	background: #e0e0e0;
+	border-radius: 2px;
+	font-weight: 700;
+	color: inherit
+}
+
+
+</style><title>Agentic-AI</title>
+</head>
+<body class='typora-export os-windows'><div class='typora-export-content'>
+<div id='write'  class=''><h1 id='module-1-introduction-to-agentic-workflow'><span>Module 1: Introduction to Agentic Workflow</span></h1><h2 id='一-什么是agentic-ai'><span>一 什么是Agentic AI？</span></h2><p><span>首先LLM（large language models）和Agenetic Al的工作流程是不一样的。比如对于以X为主题写一篇文章这个任务来说。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260522105231421.png" referrerpolicy="no-referrer" alt="image-20260522105231421"></p><p><span>LLM：是从头到尾</span><strong><span>一次性</span></strong><span>生成，不能用退格键</span><strong><span>修改</span></strong><span>。事实上我们人能写出好的作品也不通过这种从头到尾的一次性生成，而是需要不断的修改完完善</span></p><p><span>Agentic AI：将任务分为几个小任务，然后不断迭代。它存在着迭代思考修改的过程。Thinking→Revise→Thinking……这样更耗时，但是最终产出的质量更高</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260522105713614.png" referrerpolicy="no-referrer" alt="image-20260522105713614"></p><p><span>Agentic AI workflows就是LLM应用执行多步操作来完成任务</span></p><p><span>对于搭建Agentic AI workflows的关键是将复杂的任务</span><strong><span>拆解</span></strong><span>成更小的步骤，让Agentic AI流程初步执行。学会如何将任务分解成步骤，以及如何构建组件来高效形执行每个步骤是非常关键的</span></p><h2 id='二-agentic-ai-的自主性程度'><span>二 Agentic AI 的自主性程度</span></h2><p><span>作者之所以用Agentic，形容词的形式就是认为系统的智能体性可以有不同程度。而我们常见的Agent，名词形式就会引来是或不是的二元分类。其中重要的不是争论是否为智能体，而是工作流程的构建是否有价值，即使他的自主性很低。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260522111236521.png" referrerpolicy="no-referrer" alt="image-20260522111236521"></p><p><span>Less autonomous：自主性低的Agentic AI是人为构建好流程，它一步步执行最后得到结果。也就是说Agentic AI只是完成任务，并没有过多的判断和决策。</span></p><p><span>More autonomous：LLM做更多的决策，甚至是步骤顺序也由LLM决定</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260522111718034.png" referrerpolicy="no-referrer" alt="image-20260522111718034"></p><p><span>低自主性的智能体也很有价值，输出结果也更可控。而高自主性智能体更不可控制也更难预测</span></p><h2 id='三-agentic-ai的优势'><span>三 Agentic AI的优势</span></h2><p><span>Agentic AI的优势在于能够</span><strong><span>并行化</span></strong><span>，以及</span><strong><span>模块化</span></strong><span>可以将多个不同组件的优势结合起来</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260522150246328.png" referrerpolicy="no-referrer" alt="image-20260522150246328"></p><p><span>上图的例子展示了LLM模型版本迭代的提升虽然很大，但效果还是不如在上一代LLM模型上实现Agentic AI workflow带来的提升</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260522150905762.png" referrerpolicy="no-referrer" alt="image-20260522150905762"></p><p><span>Agentic AI的优势主要有三方面</span></p><ol start='' ><li><p><span>比单独的LLM更好的工作表现</span></p></li><li><p><span>能够并行所以速度快</span></p></li><li><p><span>模块化，能自由灵活的调整模块，并且可以自由更换LLM。一个任务可以运用多个LLM</span></p></li></ol><h2 id='四-agentic-ai的应用'><span>四 Agentic AI的应用</span></h2><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260522153039251.png" referrerpolicy="no-referrer" alt="image-20260522153039251"></p><p><span>比如识别一张发票所需要的信息，这个流程非常清晰，识别所需字段并录入数据库。像这样流程明确的任务更适合用Agentic AI workflow来完成。因为可以step by step的执行整个任务。</span></p><h2 id='五-任务分解识别工作流中的步骤'><span>五 任务分解：识别工作流中的步骤</span></h2><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260522194102014.png" referrerpolicy="no-referrer" alt="image-20260522194102014"></p><p><span>如上图的例子，对于写一篇文章的例子。直接一步生成这样的结果不够好，所以将它拆成了三步。但是发现三步的结果也还差点意思，就进行将其中的步骤又细分。步骤可以一直人为细分，直到细分的步骤得到的结果让你满意位置</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260522194827877.png" referrerpolicy="no-referrer" alt="image-20260522194827877"></p><p><span>在构建Agentic AI时，先分析个人或企业的工作内容，然后分步骤，将构建模块串联起来。所以充分了解可用的构建模块十分重要，这决定着你的步骤如何实现。在拆分工作流步骤时，你需要问自己这个步骤是否能用已知的构建模块（LLM or tools）完成。如果不能，那你需要接着问自己，如果作为人类，你会如何完成这个步骤，是否可以将这个步骤进一步拆解。把它分解成更小的步骤后也许更适合用LLM或其它tools来实现。</span></p><h2 id='六-agentic-ai的评估'><span>六 Agentic AI的评估</span></h2><p><span>对于一个工作流的构建，你可能先开始构建的是一个初始的workflow，它的效果可能并不好，所以你会进行不断迭代和优化这个workflow知道它达到了你的预期。那么为了推动这个 改进过程，一个关键技能就是需要学会评估你的Agentic AI</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260522200848784.png" referrerpolicy="no-referrer" alt="image-20260522200848784"></p><h2 id='七-agentic-ai设计模式'><span>七 Agentic AI设计模式</span></h2><p><span>构建Agentic workflow的四个关键设计模式</span></p><ol start='' ><li><p><span>reflection：让LLM检查自己的输出，并根据反馈进行迭代。除了让同一个模型自我批评外，还可以引入一个批评智能体。</span></p></li><li><p><span>Tool use</span></p></li><li><p><span>Planning</span></p></li><li><p><span>Multi-agent collaboration</span></p></li></ol><h1 id='module-2reflection-design-pattern'><span>Module 2：Reflection Design Pattern</span></h1><h2 id='一-通过反思提升任务输出质量'><span>一 通过反思提升任务输出质量</span></h2><p><span>可以通过LLM内部的反思进行迭代优化</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523102513201.png" referrerpolicy="no-referrer" alt="image-20260523102513201"></p><p><span>事实证明，如果你能获取外部反馈，也就是来自output module之外的新信息，反思的效果会更好。以代码为例，可以直接运行代码，看看它的实际表现，通过检查输出包括代码的错误等，这些信息对于LLM反思和改进代码更有用 </span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523103009232.png" referrerpolicy="no-referrer" alt="image-20260523103009232"></p><p><span>所以当反思有机会获取外部额外信息时，它的能力会大幅度提升</span></p><h2 id='二-为什么不直接生成而需要用refelction'><span>二 为什么不直接生成？而需要用refelction</span></h2><p><span>对于直接生成：你只需要给LLM一个指令，让它生成答案即可</span></p><p><span>  </span><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523103538979.png" referrerpolicy="no-referrer" alt="image-20260523103538979"></p><p><span>对于上面的提示示例，也被称为零样本提示</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523103728827.png" referrerpolicy="no-referrer" alt="image-20260523103728827"></p><p><span>零样本提示就是在你的prompt中没有任何的期望输出示例。如果你在提示中加入一个期望的输入输出对示例，这就被称为单样本提示。如果加入两个或多个示例，则为双样本或少样本提示。</span></p><p><span>测试发现reflection确实要比direction的效果要好</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523104220405.png" referrerpolicy="no-referrer" alt="image-20260523104220405"></p><p><span> </span></p><h2 id='三-图表生成工作流程'><span>三 图表生成工作流程</span></h2><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523105857418.png" referrerpolicy="no-referrer" alt="image-20260523105857418"></p><p><span>可以用不同的LLM进行初步生成和后续反思。比如你可以用一个LLM来生成初始代码，直接用上图所示的提示词，让它写出生成可视化的Python代码。而对于反思模型，提示词可以写成让模型扮演数据分析专家角色提供建设性反馈，然后让它按照特定标准进行点评。当你给出具体标准，比如可读性，清晰度和完整性时，这样可以帮助模型更好的理解该怎么做。最后让它编写新代码来实现你的改进建议。</span></p><h2 id='四-评估反思的影响'><span>四 评估反思的影响</span></h2><p><span>反思通常能提升系统性能，但是它也会让系统变慢。所以需要评估它实际提升了多少性能，这样可以在性能和速度之间做出取舍</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523111227739.png" referrerpolicy="no-referrer" alt="image-20260523111227739"></p><p><span>对于客观的评价来说，可以收集一组问题并配上标准答案，大概10-15个左右，然后比较没有reflection和有reflection的结果准确性。  </span></p><p><span>但是如果你的应用需要主观评估而不是客观评估呢？比如评估两个图表哪个好看。对于这些偏主观的评估，你可以尝试用LLM作为评判者。一种基础做法是将两张图扔到能接受图片输入的多模态大模型中直接问它哪张图更好看，但事实证明这样的效果并不好。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523112606156.png" referrerpolicy="no-referrer" alt="image-20260523112606156"></p><p><span>对于用LLM做评判者来说，主要有两个问题</span></p><ol start='' ><li><p><span>首先就是模型给出的答案往往并不理想，结果可能对评判提示词的具体表述非常敏感。有时的排序结果也与人类专家的判断并不一致</span></p></li><li><p><span>很多大模型会存在位置偏差，也就是会更倾向于选择第一个选项</span></p></li></ol><p><span>与其让大模型比较一对输入，设定评分标准让其打分会得到更一致的结果。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523113325328.png" referrerpolicy="no-referrer" alt="image-20260523113325328"></p><p><span>如上图，你可以提示模型针对单张图片根据质量评分标准评估附图。评分标准可能包括是否有清晰的标题，坐标轴标签是否齐全，图表类型是否合适等几项明确标准。而且与其让模型按照一到五打分，不如设置五个二元标准（五个零一标准），让模型给出五个二元分数，然后把分数加起来得到一到五分，这样通常能得到更一致的结果。</span></p><p><span>除了评估reflection是否有用外，这套评估体系话可以让你不断修改更好的提示词</span></p><p><span>最后总结一下对于reflection的评估</span></p><ol start='' ><li><p><span>Objective evals</span></p><ul><li><p><span>Code-based evals are easier</span></p></li><li><p><span>Build a dataset of ground truth examples</span></p></li></ul></li><li><p><span>Subjective evals</span></p><ul><li><p><span>Use LLM as a judge</span></p></li><li><p><span>Rubic-based grading is better</span></p></li></ul></li></ol><h2 id='五-使用外部反馈'><span>五 使用外部反馈</span></h2><p><span>前面也提到过如果结合外部反馈进行反思，其效果远超仅依赖LLM自身反馈的反思</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523143227215.png" referrerpolicy="no-referrer" alt="image-20260523143227215"></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523144132911.png" referrerpolicy="no-referrer" alt="image-20260523144132911"></p><h1 id='module-3-tools-use'><span>Module 3: Tools Use</span></h1><h2 id='一-什么是工具'><span>一 什么是工具</span></h2><p><span>工具其实就是我们提供给大模型的函数，它可以请求调用</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523144646230.png" referrerpolicy="no-referrer" alt="image-20260523144646230"></p><p><span>工具使用中一个重要方面是我们可以让大模型</span><strong><span>自主决定</span></strong><span>是否使用这些工具中的任何一个。工具供大模型选择使用，只有在其认为合适时才会调用这些工具。它不是硬编码进流程中，而是可以自由选择是否调用</span></p><p><span>作为开发者，你需要思考应用真正要实现哪些功能，然后创建相应的函数工具让大模型可以调用，以便它能使用合适的工具完成相应的任务。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260523145909302.png" referrerpolicy="no-referrer" alt="image-20260523145909302"></p><h2 id='二-创建工具'><span>二 创建工具</span></h2><p><span>工具其实就是LLM可以请求执行的代码或函数</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260524095551522.png" referrerpolicy="no-referrer" alt="image-20260524095551522"></p><p><span>上图则是LLM调用一个函数的简单示例。需要明确的是，LLM并不会</span><strong><span>直接调用</span></strong><span>函数</span></p><p><span>，而是以特定格式输出内容。比如上面LLM输出</span><code>Function: get_current_time()</code><span>，告诉我需要为LLM调用函数，然后我调用函数得到结果后告诉LLM，最后LLM返回结果</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260524102026435.png" referrerpolicy="no-referrer" alt="image-20260524102026435"></p><p><span>同样的对于这个例子，你首先需要给出提示词，告诉LLM可以用这个函数得到时间，需要调用这个函数时输出以下内容。与之前不同的是，</span><code>get_current_time()</code><span>的参数由LLM提供。</span></p><p><span>总结一下让LLM使用工具的流程如下：</span></p><ol start='' ><li><p><span>将需要的工具提供为LLM，并告知LLM该工具已经可用。对于这个prompt可能需要更多的内容，比如这个工具有什么用，什么时候用这个工具等</span></p></li><li><p><span>当LLM决定调用工具时，它会生成一个特定输出告诉你需要为LLM调用函数</span></p></li><li><p><span>然后你去调用这个函数，获取输出并把你刚调用的函数结果返回给LLM</span></p></li><li><p><span>LLM用这个结果继续执行后续操作</span></p></li></ol><h2 id='三-工具语法'><span>三 工具语法</span></h2><p><span>接下里演示如何是哟个AISuite开源库，让你的LLM调用工具</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260524103639455.png" referrerpolicy="no-referrer" alt="image-20260524103639455"></p><p><span>在AISuite中，工具函数会自动以合适的方式描述给LLM，让LLM知道何时该调用它。这样你就不需要手写很长的提示词告诉LLM该怎么做，AISuite语法能够自动完成这件事。它的实现方法其实就是读取工具函数中的文档字符串，也就是一些注释，用来判断如何向LLM描述这个函数。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260524104454611.png" referrerpolicy="no-referrer" alt="image-20260524104454611"></p><p><span>在AISuite底层，它会自动生成一个详细描述函数的JSON架构，而这个JSON架构其实就是传递给LLM的部分。有些API需要你手动构建这个JSON架构然后传递给LLM，但AISuite会自动帮你完成这些操作</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260524105320462.png" referrerpolicy="no-referrer" alt="image-20260524105320462"></p><h2 id='四-代码执行工具'><span>四 代码执行工具</span></h2><p><span>  </span><code>exec()</code><span>函数时Python的内置函数，它能执行你传入的任何代码。这让LLM能够编写并执行代码</span><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260524110531486.png" referrerpolicy="no-referrer" alt="image-20260524110531486"></p><p><span>但上述的代码执行工具存在着安全隐患，所以推荐用沙盒环境测试LLM生成的代码</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260524111300219.png" referrerpolicy="no-referrer" alt="image-20260524111300219"></p><h2 id='五-mcp'><span>五 MCP</span></h2><p><span>MCP（Model Context Protocol），即模型上下文协议，作为让LLM获取更多上下文和工具的方式</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260524194447795.png" referrerpolicy="no-referrer" alt="image-20260524194447795"></p><p><span>如果每个开发者都为这些数据源构建</span><strong><span>自定义</span></strong><span>封装，那么有M个应用开发，N个工具，那加起来的工作量就是M×N。此时MCP就出现了，MCP提出标准，让应用统一访问工具和数据源，此时工作量就是M+N。MCP的初始设计重点在于如何为LLM提供更多上下文或获取数据，所以最初的许多工具只是用来 获取数据。但MCP不仅能访问数据，还能调用应用可能需要的通用函数。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260524195305997.png" referrerpolicy="no-referrer" alt="image-20260524195305997"></p><p><span> MCP定义了应用程序和 AI 模型之间交换上下文信息的方式。这使得开发者能够</span><strong><span>以一致的方式将各种数据源、工具和功能连接到 AI 模型</span></strong><span>（一个中间协议层），就像 USB-C 让不同设备能够通过相同的接口连接一样。MCP 的目标是创建一个通用标准，使 AI 应用程序的开发和集成变得更加简单和统一</span></p><h1 id='module-4-practical-tips-for-building-agentic-ai'><span>Module 4: Practical Tips for Building Agentic AI</span></h1><h2 id='一-评估'><span>一 评估</span></h2><p><span>在发开Agentic AI时，很难提前判断系统在哪些地方能正常运行，哪些地方表现不佳。因此你很难确定该将精力重点投入在哪些环节。所以一个建议就是先尝试快速搭建一个</span><strong><span>粗糙</span></strong><span>的系统，这样你就可以实际测试并观察系统在哪些方面还未达到你的预期效果。从而能更有针对性地投入精力，进一步完善系统。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260525110816364.png" referrerpolicy="no-referrer" alt="image-20260525110816364"></p><p><span>当你初步搭建一个系统时，就可以进行测试看看哪些地方做的好哪些地方有缺陷。比如上图的例子，经过测试发现这个系统在日期处理时经常出现错误。那么接下来的重点就是改进日期提取的准确率。那么为了衡量你改进的进展，可以创建一个评测方法用来衡量系统提取到日期的准确率。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260525202609900.png" referrerpolicy="no-referrer" alt="image-20260525202609900"></p><p><span>优化通用型AI工作流的流程</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260525202825737.png" referrerpolicy="no-referrer" alt="image-20260525202825737"></p><p><span>评估大致分为两个主要维度，X轴表示你评估输出的方式，Y轴表示你是否拥有每个样本的真实标签</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260525203723933.png" referrerpolicy="no-referrer" alt="image-20260525203723933"></p><h2 id='二-错误分析与确定后续步骤优先级'><span>二 错误分析与确定后续步骤优先级</span></h2><p><span>当你初步构建一个简易的系统后，它的表现往往不如我们所期望的那样。那么你该把精力集中在哪个方面去优化这个流程呢？Agentic workflow 包含许多不同的组成部分，优化其中某些部分可能会带来更大提升。所以你选择优化重点的能力会极大影响你优化系统的效果和速度。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260526092541534.png" referrerpolicy="no-referrer" alt="image-20260526092541534"></p><p><span>如上面的研究智能体，在之前的课中我们已经知道它存在着遗漏关键点的问题。事实上，在这个流程的众多步骤中几乎每一步都可能导致遗漏关键点的问题。所以与其凭直觉决定哪个环节要优化，更好的方法是进行错误分析，深入理解工作流程中的每一步。作者会经常检查模型的推理过程记录 ，也就是每一步之后的中间输出结果，这样就可以判断哪个环节的表现不佳，这能帮助我们发现有显著提升空间的地方。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260526093820684.png" referrerpolicy="no-referrer" alt="image-20260526093820684"></p><p><span>所有中间步骤的整体输出集合通常被称为该智能体运行的</span><strong><span>追踪</span></strong><span>（Trcae），单步输出有时被称为</span><strong><span>跨度</span></strong><span>（Span）。</span></p><p><span>为了让分析更严谨，与其只是阅读并形成非正式印象，你可以实际建立一个表格，更明确地统计错误发生的位置。这里的错误指的是某一步输出的结果明显比人类专家在相同输入下的表现要差得多。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260526103421085.png" referrerpolicy="no-referrer" alt="image-20260526103421085"></p><h2 id='三-更多错误分析例子'><span>三 更多错误分析例子</span></h2><p><span> 例子1： 发票处理的智能体</span></p><p><span>在前面的课中我们提到系统经常在发票到期日上出错，因此我们可以进行错误分析尝试找出可能导致错误的组件。比如是PDF转文本时出错？还是LLM提取出错？为了进行错误分析，作者会找一些日期提取错误的实例，进行下面的错误分析。</span><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260526105145227.png" referrerpolicy="no-referrer" alt="image-20260526105145227"></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260526104243173.png" referrerpolicy="no-referrer" alt="image-20260526104243173"></p><p><span> 顺便提一下，底部的错误百分比加起来可能并不等于100%，因为这些错误并不互斥。</span></p><p><span>例子2：回复客户邮件的智能体</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260526105228681.png" referrerpolicy="no-referrer" alt="image-20260526105228681"></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260526105437992.png" referrerpolicy="no-referrer" alt="image-20260526105437992"></p><h2 id='四-组件级评估'><span>四 组件级评估</span></h2><p><span>端到端的评估会出现以下俩个问题：</span></p><ol start='' ><li><p><span>评估时重新运行整个工作流程可以获得不错的性能指标，但是</span><strong><span>成本过高</span></strong></p></li><li><p><span>其他组件的随机性可能会引入噪音</span></p></li></ol><p><span>因此为组件设置专门的组件评估方法十分重要</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260526110837404.png" referrerpolicy="no-referrer" alt="image-20260526110837404"></p><p><span>在你完成组件优化后，最好进行一次端到端的评估，确保在优化网页搜索系统一段时间后你确实提升了整体系统的性能。但在逐步调整这些超参数的过程中，你可以只评估单个组件而不是反复进行端到端评估。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260526111243946.png" referrerpolicy="no-referrer" alt="image-20260526111243946"></p><h2 id='五-如何解决你发现的问题'><span>五 如何解决你发现的问题</span></h2><p><span> 一个智能体工作流可能包含多种不同类型得到组件，可以分为non-LLM component和LLM componetn</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260527094839941.png" referrerpolicy="no-referrer" alt="image-20260527094839941"></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260527095254890.png" referrerpolicy="no-referrer" alt="image-20260527095254890"></p><h2 id='六-延迟和成本的优化'><span>六 延迟和成本的优化</span></h2><p><span>在构建智能体流程时，作者通常建议团队先专注于输出质量，成本和延迟优化可以后置。并不是成本和延迟不重要，但作者认为提升性能或输出质量通常时最难的部分。只有当系统真正运行良好时，再去关注其他方面可能会更合适。</span></p><p><span>如果你想优化智能体工作流的延迟，作者常用的方法是对工作流进行基准测试或计时。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260527104217239.png" referrerpolicy="no-referrer" alt="image-20260527104217239"></p><p><span>对于成本问题同样也可以对每一步的成本进行计算</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260527104700819.png" referrerpolicy="no-referrer" alt="image-20260527104700819"></p><p><span> </span><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260527104851576.png" referrerpolicy="no-referrer" alt="image-20260527104851576"></p><h2 id='七-优化流程概述'><span>七 优化流程概述</span></h2><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260527100720815.png" referrerpolicy="no-referrer" alt="image-20260527100720815"></p><p><span>在构建这些工作流时，作者常常觉得自己主要在做两件事。一是构建：也就是编写软件，尝试通过写代码来优化我的系统。二是分析，帮助他决定下一步该把精力放在哪里。在构建新的智能体工作流时，作者会首先快速搭建一个端到端系统，这样他就能开始检查端到端系统的最终输出或者阅读执行Traces了解系统表现好的地方和不佳的地方。然后可能会发现某些组件有问题，于是可能去微调某些组件或者继续优化整体端到端系统。随着系统逐渐成熟，除了手动检查部分输出和阅读Traces外。作者可能会开始构建评测集，准备一个小的数据集比如10-20个样本，用来计算指标，至少可以评估端到端性能。构建评测集可以更细致的判断如何优化端到端系统或者改进某些组件。等系统进一步成熟后，分析会变得更加系统化，比如进行错误分析，逐步检查各个组件，统计哪些组件导致了不理想的输出。最终当系统成熟到可以高效优化组件层面时，作者也会构建组件级评测工具。</span></p><h1 id='module-5-patterns-for-highly-autonomous-agents'><span>Module 5: Patterns for highly autonomous agents</span></h1><h2 id='一-规划工作流'><span>一 规划工作流</span></h2><p><span>假设你经营一家太阳镜零售店，并且你有库存中太阳镜的信息储存在一个数据库中。你可能希望客服智能体能够回答类似这样的问题。你们现在有圆形太阳镜现货价格在100美元以下嘛？</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260528212853544.png" referrerpolicy="no-referrer" alt="image-20260528212853544"><span>这是一个相当复杂的查询，因为你需要浏览产品描述来判断哪些太阳镜是圆形的，然后再查看哪些有库存，最后筛选出价格低于一百美元的产品，才能告诉客户是的，我们有经典款太阳镜是圆形金属框架并且只要60美元。</span></p><p><span>那么如何让智能体回答这类以及更多客户问题呢？</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260529095040887.png" referrerpolicy="no-referrer" alt="image-20260529095040887"></p><p><span>为此我们将为LLM提供一组工具，让它能够获取商品描述，比如查询商品描述，检查库存，处理商品退货（虽然本次查询不需要，但是其他问题可能会用到），获取商品价格，检查历史交易，处理商品销售等。</span></p><p><span>为了让LLM确定回应客户请求所需正确工具序列，你可能会这样编写一个提示语，你可以使用以下工具，并且每个工具都有对应的功能描述。比如说LLM拥有六种或更多工具，然后让它返回一个分布执行方案，以便完成用户的请求。在这种情况下，为了回答这个特定的问题。LLM可能会先用获取商品描述工具查找圆形太阳镜的描述，然后用库存查询工具确认是否有货，再用获取商品价格工具查看库存商品价格是否低于100美元。</span></p><p><span>当LLM输出包含三步的方案后，我们可以先取出第一步的文本，也就是这里用红色标注的这段文本，然后将其传递给LLM。也许还可以补充工具相关的上下文信息，结合用户的查询内容并补充相关背景信息，然后让LLM来执行第一步操作。在这种情况下希望LLM会选择调用获取商品描述的工具以获得相应的商品描述。第一步的输出结果可以帮助它筛选除哪些是圆形太阳镜。然后将第一步的输出和第二步的指令一起传递给LLM来执行方案的第二步。然后接着将第二步的输出和第三步的指令和一起……</span></p><h2 id='二-创建和执行llm计划'><span>二 创建和执行LLM计划</span></h2><p><span> 在上一节中，作者用简单的文本描述以高层次方案展示了LLM输出的计划。实际上，许多开发者会让LLM以JSON格式输出计划。因为这样下游代码可以更清晰明确的解析计划的每一步。目前所有主流LLM都非常擅长生成JSON格式的输出。因此系统提示可能会这样说：你可以使用以下工具，只需运行这些工具然后以JSON格式创建分布计划，你可以详细描述格式，目的是让它输出如下图所示的计划。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260529164515775.png" referrerpolicy="no-referrer" alt="image-20260529164515775"></p><p><span>用这种JSON格式相比与用英文写计划让下游代码能更清晰的解析出计划的每一步，从而可以可靠的逐步执行。有些开发者会用XML格式，也有少部分会用Markdown。</span></p><h2 id='三-结合代码执行的规划'><span>三 结合代码执行的规划</span></h2><p><span>带代码执行的规划，是指不再让语言模型直接输出计划。比如说不让它以JSON格式输出逐步执行的每一步。为什么不让LLM直接编写代码呢？这样代码可以涵盖计划中的多个步骤。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260529194755509.png" referrerpolicy="no-referrer" alt="image-20260529194755509"></p><p><span>如果如上图所示，先定义好工具，然后让LLM规划的话，对于不同的新问题就需要不断创建更多工具，试图覆盖所有可能的问题。这种方法既脆弱又低效，并且需要持续应对极端情况。所以其实有更好的方式，比如你可以这么提示LLM：请编写代码来解决用户的查询，并以Python代码返回答案。可以用这些起始和结束的执行Python XML标签来分隔。这样LLM就能直接写代码把表格加载到数据处理库中。 </span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260529195614322.png" referrerpolicy="no-referrer" alt="image-20260529195614322"></p><p><span>对于可以通过编写代码完成的任务，让LLM用软件代码表达方案并直接执行是一种让它制定丰富计划的强大方式。</span></p><h2 id='四-多智能体工作流'><span>四 多智能体工作流</span></h2><p><span>由于人类团队的工作方式，我们自然会想到将复杂任务分解给不同角色的成员。下面的例子说明复杂任务本身就可以自然拆分成不同的子任务，由不同技能的人分别完成。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260530095951026.png" referrerpolicy="no-referrer" alt="image-20260530095951026"></p><p><span>以创建营销素材为例，我们可以详细看看研究院、平面设计师和文案撰写人员的具体工作。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260530100507075.png" referrerpolicy="no-referrer" alt="image-20260530100507075"></p><p><span>构建单个智能体的方法就是通过提示LLM扮演研究员、平面设计师或文案人员的角色，具体取决于智能体的类型。比如对于研究员智能体，你可以这样提示它：你是一名研究智能体，擅长分析市场趋势和竞争对手，进行线上调研，分析太阳镜产品的市场趋势并总结竞争对手的相关动态。</span></p><p><span>在构建好这三个智能体之后，让它们协作生成最终报告的一种方式就是线性线程。</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260530101511255.png" referrerpolicy="no-referrer" alt="image-20260530101511255"><span>如果你想为太阳镜打造夏季营销活动，你可以将这个任务交给研究智能体，它会撰写报告说明当前太阳镜趋势及竞争产品。这个调研报告可以交给平面设计师智能体分析调研数据并制作几种数据可视化和艺术设计方案。所有这些素材随后会交给文案智能体，结合调研和设计成果撰写最终的营销宣传册。</span></p><p><span>作为线性流程的替代方案，你还可以让智能体之间以更复杂的方式相互协作。接下来用一个多智能体规划的例子来说明</span><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260530102304306.png" referrerpolicy="no-referrer" alt="image-20260530102304306"></p><p><span>在之前的课中，我们会为LLM配置一组工具，让LLM创建流程去调用这些工具。而现在，LLM能够选择的不是工具，而是一个个智能体。上图其实是有四个智能体，有一位市场经理负责为市场团队定方向并分配任务给研究院、平面设计师和文案智能体。</span></p><h2 id='五-多智能体系统的通信模式'><span>五 多智能体系统的通信模式</span></h2><p><span>两种常见的通信模式：线性沟通、层级沟通</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260531095212920.png" referrerpolicy="no-referrer" alt="image-20260531095212920"><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260531095349425.png" referrerpolicy="no-referrer" alt="image-20260531095349425"></p><p><span>其它更高级但不常见的通信模式：更深层次的层级结构、全员互联沟通模式</span></p><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260531095704995.png" referrerpolicy="no-referrer" alt="image-20260531095704995"><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260531095804217.png" referrerpolicy="no-referrer" alt="image-20260531095804217"></p><h2 id='六-结论'><span>六 结论</span></h2><p><img src="C:\Users\MS\AppData\Roaming\Typora\typora-user-images\image-20260531100201291.png" referrerpolicy="no-referrer" alt="image-20260531100201291"></p><p>&nbsp;</p></div></div>
+<div id="toc-sidebar" role="complementary" aria-label="Table of Contents">
+  <div class="toc-header">
+    <div>
+      目录
+      <div class="subtitle">Table of Contents</div>
+    </div>
+  </div>
+
+  <div class="toc-tools" role="toolbar" aria-label="目录工具">
+    <div class="toc-search">
+      <!-- SVG 图标：颜色现在由 CSS 中的 .toc-search .icon 控制 -->
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+      </svg>
+      <input id="toc-search" type="search" placeholder="搜索标题…" aria-label="搜索标题">
+      <button class="clear" id="toc-clear" aria-label="清除搜索" title="清除">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="toc-actions">
+      <button class="icon-btn" id="toc-expand-all" aria-label="展开全部" title="展开全部">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+      </button>
+      <button class="icon-btn" id="toc-collapse-all" aria-label="折叠全部" title="折叠全部">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <nav id="toc-nav" aria-label="目录">
+    <ul id="toc-tree" role="tree"></ul>
+  </nav>
+
+  <div id="toc-footer">
+    <div class="author">Shuai Ma</div>
+    <div class="date">2026.05.31</div>
+  </div>
+
+  <!-- 右侧“幽灵把手”：盒子外，不遮滚动条 -->
+  <div id="toc-resizer" class="toc-resizer" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" tabindex="0"></div>
+</div>
+
+<!-- 浮动开关按钮 -->
+<button id="toc-toggle" aria-label="打开/关闭目录" title="目录">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <g class="icon-closed">
+      <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"></path>
+    </g>
+    <g class="icon-open" style="display:none">
+      <path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+    </g>
+  </svg>
+</button>
+
+<script>
+(function(){
+  const $  = (sel, el=document) => el.querySelector(sel);
+  const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+  const write = document.getElementById('write') || document.body;
+
+  /* ====== 开关状态（这里处理“首次不动画”） ====== */
+  const STORE_KEY = 'typora-toc-open';
+  const sidebarEl = document.getElementById('toc-sidebar');
+  const toggleEl  = document.getElementById('toc-toggle');
+
+  function setOpen(open, opts){
+    const animate = !opts || opts.animate !== false;
+
+    // 首次初始化时：临时关闭过渡
+    if (!animate){
+      if (sidebarEl) sidebarEl.style.transition = 'none';
+      if (toggleEl)  toggleEl.style.transition  = 'none';
+    }
+
+    document.body.classList.toggle('toc-open', !!open);
+    try{ localStorage.setItem(STORE_KEY, open ? '1':'0'); }catch(e){}
+
+    if (toggleEl){
+      const closed = toggleEl.querySelector('.icon-closed');
+      const opened = toggleEl.querySelector('.icon-open');
+      if (closed && opened){
+        if (open){
+          closed.style.display='none';
+          opened.style.display='inline';
+        }else{
+          opened.style.display='none';
+          closed.style.display='inline';
+        }
+      }
+    }
+
+    if (!animate){
+      // 强制重绘一下，然后再恢复 transition，避免后续点击没动画
+      if (sidebarEl) sidebarEl.getBoundingClientRect();
+      if (toggleEl)  toggleEl.getBoundingClientRect();
+      setTimeout(()=>{
+        if (sidebarEl) sidebarEl.style.transition = '';
+        if (toggleEl)  toggleEl.style.transition  = '';
+      }, 0);
+    }
+  }
+
+  const saved = (localStorage.getItem(STORE_KEY) === '1');
+  const preferOpen = saved || (window.innerWidth > 1024);
+  // ★ 初始化：不做动画，直接就位
+  setOpen(preferOpen, { animate: false });
+
+  /* ====== 工具函数 ====== */
+  function getPxVar(name, fallback){
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  function anchorOffset(){
+    const small = window.innerWidth <= 1024;
+    const gap   = small ? 10 : getPxVar('--gap', 12);
+    const head  = getPxVar('--header-pad', 14);
+    return gap + head;
+  }
+  const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+  let animToken = 0, activeRAF = null;
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+  function cancelOngoingScroll(){
+    animToken++;
+    if (activeRAF != null){
+      cancelAnimationFrame(activeRAF);
+      activeRAF = null;
+    }
+    document.documentElement.classList.remove('no-smooth');
+  }
+
+  function smoothScrollTo(targetY, baseDuration = 340){
+    return new Promise(resolve=>{
+      const myToken = animToken;
+      const docEl = document.documentElement;
+
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+        window.scrollTo(0, targetY);
+        return resolve();
+      }
+      const startY = window.scrollY;
+      const delta  = targetY - startY;
+      if (Math.abs(delta) < 40){
+        window.scrollTo(0, targetY);
+        return resolve();
+      }
+
+      docEl.classList.add('no-smooth');
+
+      const kickPx = clamp(Math.abs(delta) * 0.18, 80, 360);
+      const kickY  = startY + Math.sign(delta) * kickPx;
+      window.scrollTo(0, clamp(kickY, 0, Math.max(0, docEl.scrollHeight - window.innerHeight)));
+
+      const start = performance.now();
+      const dur   = clamp(baseDuration + Math.abs(delta) * 0.12, 280, 620);
+
+      function frame(now){
+        if (myToken !== animToken){
+          docEl.classList.remove('no-smooth');
+          return resolve();
+        }
+        const t = Math.min(1, (now - start) / dur);
+        const y = startY + delta * easeOutCubic(t);
+        window.scrollTo(0, y);
+        if (t < 1){
+          activeRAF = requestAnimationFrame(frame);
+        }else{
+          requestAnimationFrame(()=>{
+            window.scrollTo(0, targetY);
+            docEl.classList.remove('no-smooth');
+            resolve();
+          });
+        }
+      }
+      activeRAF = requestAnimationFrame(frame);
+    });
+  }
+
+  /* ====== 构建目录 ====== */
+  const headings = $$('#write h1, #write h2, #write h3, #write h4, #write h5, #write h6');
+  const treeRoot = $('#toc-tree');
+  const slugify = (text) => (text||'').trim().toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu,'')
+    .replace(/\s+/g,'-')
+    .replace(/-+/g,'-');
+
+  const ulStack = [treeRoot];
+  let curLevel = 1, lastLi = null;
+  let navLockUntil = 0;
+
+  function scrollToHeadingSmooth(id){
+    const el = document.getElementById(id);
+    if(!el) return;
+
+    cancelOngoingScroll();
+
+    const anchor  = anchorOffset();
+    const rectTop = el.getBoundingClientRect().top;
+    const current = window.scrollY;
+    const doc     = document.documentElement;
+    const maxScroll = Math.max(0, (doc.scrollHeight - window.innerHeight));
+    let targetY = current + rectTop - anchor;
+    targetY = clamp(targetY, 0, maxScroll);
+
+    navLockUntil = Date.now() + 700;
+    activate(id);
+    smoothScrollTo(targetY, 340).then(()=> computeActiveId(true));
+  }
+
+  if(!headings.length){
+    const li = document.createElement('li');
+    li.innerHTML = '<div class="row" role="link" tabindex="0"><a>(未检测到标题)</a></div>';
+    treeRoot.appendChild(li);
+  }else{
+    headings.forEach((h, idx)=>{
+      if(!h.id){
+        const s = slugify(h.textContent) || ('h-' + (idx+1));
+        let u = s, k = 2;
+        while(document.getElementById(u)) u = s + '-' + k++;
+        h.id = u;
+      }
+      const level = Math.min(6, Math.max(1, parseInt(h.tagName.slice(1),10) || 1));
+
+      while(level < curLevel){ ulStack.pop(); curLevel--; }
+      while(level > curLevel){
+        const sub = document.createElement('ul');
+        (lastLi || treeRoot).appendChild(sub);
+        ulStack.push(sub); curLevel++;
+      }
+
+      const li  = document.createElement('li');
+      li.classList.add('lv-' + level);
+      li.setAttribute('role','treeitem');
+
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.setAttribute('role','link');
+      row.setAttribute('tabindex','0');
+      row.dataset.targetId = h.id;
+      row.setAttribute('aria-label', h.textContent.trim());
+
+      const a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.textContent = h.textContent.replace(/\s+/g,' ').trim();
+      a.dataset.label = a.textContent;
+
+      a.addEventListener('click', (e)=>{
+        e.preventDefault();
+        scrollToHeadingSmooth(h.id);
+        history.replaceState(null,'','#'+h.id);
+        if (window.innerWidth <= 1024) setOpen(false);
+      });
+
+      row.addEventListener('click', (e)=>{
+        if (e.target.closest('.twisty')) return;
+        if (e.target.closest('a')) return;
+        scrollToHeadingSmooth(row.dataset.targetId);
+        history.replaceState(null,'','#'+row.dataset.targetId);
+        if (window.innerWidth <= 1024) setOpen(false);
+      });
+      row.addEventListener('keydown', (e)=>{
+        if (e.target !== row) return;
+        const key = e.key.toLowerCase();
+        if (key === 'enter' || key === ' '){
+          e.preventDefault();
+          scrollToHeadingSmooth(row.dataset.targetId);
+          history.replaceState(null,'','#'+row.dataset.targetId);
+          if (window.innerWidth <= 1024) setOpen(false);
+        }
+      });
+
+      row.appendChild(a);
+      li.appendChild(row);
+      ulStack[ulStack.length-1].appendChild(li);
+      lastLi = li;
+    });
+
+    // 添加折叠按钮
+    $$('#toc-tree li').forEach(li=>{
+      const hasChildren = !!li.querySelector(':scope > ul');
+      if(hasChildren){
+        li.classList.add('has-children');
+        li.setAttribute('aria-expanded','true');
+        const btn = document.createElement('button');
+        btn.className = 'twisty';
+        btn.setAttribute('aria-label','折叠/展开');
+        btn.innerHTML = `
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 18l6-6-6-6"
+                  fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>`;
+        const row = li.querySelector(':scope > .row');
+        row.insertBefore(btn, row.firstChild);
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const collapsed = li.classList.toggle('collapsed');
+          li.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+          saveCollapsed(li, collapsed);
+        });
+      }
+    });
+  }
+
+  /* ====== 折叠状态持久化 ====== */
+  const COLLAPSE_KEY = 'typora-toc-collapsed';
+  const collapsedMap = new Map();
+
+  function getPath(li){
+    const labels = [];
+    let p = li;
+    while(p && p !== treeRoot){
+      const label = p.querySelector(':scope > .row a')?.dataset.label || '';
+      labels.push(label);
+      p = p.parentElement.closest('li');
+    }
+    return labels.reverse().join(' > ');
+  }
+  function saveCollapsed(li, collapsed){
+    const path = getPath(li);
+    collapsedMap.set(path, collapsed);
+    persistCollapsed();
+  }
+  function persistCollapsed(){
+    try{
+      const obj = {};
+      collapsedMap.forEach((v,k)=>obj[k]=v);
+      localStorage.setItem(COLLAPSE_KEY, JSON.stringify(obj));
+    }catch(e){}
+  }
+  try{
+    const savedMap = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}');
+    $$('#toc-tree li.has-children').forEach(li=>{
+      const path = getPath(li);
+      if(savedMap[path]){
+        li.classList.add('collapsed');
+        li.setAttribute('aria-expanded','false');
+      }
+    });
+    Object.entries(savedMap).forEach(([k,v])=>collapsedMap.set(k, !!v));
+  }catch(e){}
+
+  /* 展开 / 折叠全部 */
+  $('#toc-expand-all').addEventListener('click', ()=>{
+    $$('#toc-tree li.has-children').forEach(li=>{
+      li.classList.remove('collapsed');
+      li.setAttribute('aria-expanded','true');
+      saveCollapsed(li, false);
+    });
+  });
+  $('#toc-collapse-all').addEventListener('click', ()=>{
+    $$('#toc-tree li.has-children').forEach(li=>{
+      li.classList.add('collapsed');
+      li.setAttribute('aria-expanded','false');
+      saveCollapsed(li, true);
+    });
+  });
+
+  /* ====== 搜索 ====== */
+  const input    = $('#toc-search');
+  const clearBtn = $('#toc-clear');
+  let preSearchStates = null;
+
+  const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const esc  = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  function clearHighlight(a){ a.innerHTML = a.dataset.label; }
+  function applyHighlight(a, q){
+    if(!q) return clearHighlight(a);
+    const re = new RegExp(esc(q), 'ig');
+    a.innerHTML = a.dataset.label.replace(re, m=>`<mark>${m}</mark>`);
+  }
+
+  function rememberCollapseStates(){
+    const obj = {};
+    $$('#toc-tree li.has-children').forEach(li=>{
+      obj[getPath(li)] = li.classList.contains('collapsed');
+    });
+    return obj;
+  }
+  function restoreCollapseStates(obj){
+    if(!obj) return;
+    $$('#toc-tree li.has-children').forEach(li=>{
+      const collapsed = !!obj[getPath(li)];
+      li.classList.toggle('collapsed', collapsed);
+      li.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    });
+  }
+  function setAllExpanded(expanded){
+    $$('#toc-tree li.has-children').forEach(li=>{
+      li.classList.toggle('collapsed', !expanded);
+      li.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    });
+  }
+
+  function doSearch(q){
+    const query = norm(q);
+    if(!query){
+      $$('#toc-tree a').forEach(a=>clearHighlight(a));
+      $$('#toc-tree li').forEach(li=>li.hidden = false);
+      restoreCollapseStates(preSearchStates);
+      preSearchStates = null;
+      return;
+    }
+    if(preSearchStates == null){
+      preSearchStates = rememberCollapseStates();
+    }
+    setAllExpanded(true);
+
+    $$('#toc-tree li').forEach(li=>li.hidden = true);
+    $$('#toc-tree a').forEach(a=>{
+      const hit = norm(a.dataset.label).includes(query);
+      clearHighlight(a);
+      if(hit){
+        applyHighlight(a, q);
+        const li = a.closest('li');
+        li.hidden = false;
+        let p = li.parentElement.closest('li');
+        while(p){
+          p.hidden = false;
+          p = p.parentElement.closest('li');
+        }
+        li.querySelectorAll(':scope li').forEach(n=>n.hidden = false);
+      }
+    });
+  }
+
+  input.addEventListener('input', e=> doSearch(e.target.value));
+  clearBtn.addEventListener('click', ()=>{
+    input.value = '';
+    doSearch('');
+    input.focus();
+  });
+
+  /* ====== 当前章节高亮 ====== */
+  const linksById = {};
+  $$('#toc-tree a').forEach(a=>{
+    linksById[a.getAttribute('href').slice(1)] = a;
+  });
+
+  function activate(id){
+    $$('#toc-tree .row.is-active').forEach(r=>r.classList.remove('is-active'));
+    const row = linksById[id]?.closest('li')?.querySelector(':scope > .row');
+    if(row) row.classList.add('is-active');
+
+    const li = linksById[id]?.closest('li');
+    if(li){
+      let p = li.parentElement.closest('li');
+      while(p){
+        p.classList.remove('collapsed');
+        p.setAttribute('aria-expanded','true');
+        p = p.parentElement.closest('li');
+      }
+    }
+  }
+
+  const EPS = 6;
+  let ticking = false;
+
+  function computeActiveId(force=false){
+    if (!force && Date.now() < navLockUntil) return;
+    const anchor = anchorOffset();
+    let bestBelowId = null, bestBelowTop = Infinity;
+    let bestAboveId = null, bestAboveTop = -Infinity;
+
+    for(const h of headings){
+      const top = h.getBoundingClientRect().top - anchor;
+      if (top >= -EPS && top < bestBelowTop){
+        bestBelowTop = top;
+        bestBelowId = h.id;
+      }
+      if (top <= EPS && top > bestAboveTop){
+        bestAboveTop = top;
+        bestAboveId = h.id;
+      }
+    }
+    const id = (bestBelowId !== null) ? bestBelowId : bestAboveId;
+    if (id) activate(id);
+  }
+
+  function onScroll(){
+    if(!ticking){
+      ticking = true;
+      requestAnimationFrame(()=>{
+        computeActiveId();
+        ticking = false;
+      });
+    }
+  }
+  document.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('resize', onScroll, {passive:true});
+  computeActiveId(true);
+
+  /* 开关按钮（此时已经有动画了） */
+  $('#toc-toggle').addEventListener('click', ()=>{
+    setOpen(!document.body.classList.contains('toc-open'));
+  });
+
+  /* 小屏：点击正文空白处关闭侧栏 */
+  document.addEventListener('click', (e)=>{
+    const s = $('#toc-sidebar');
+    const btn = $('#toc-toggle');
+    if(window.innerWidth > 1024) return;
+    if(!document.body.classList.contains('toc-open')) return;
+    const inside = s.contains(e.target) || btn.contains(e.target) || $('#toc-search') === e.target;
+    if(!inside) setOpen(false);
+  }, {passive:true});
+
+  /* 调宽：右侧“幽灵把手”（外侧，不遮滚动条） */
+  const WIDTH_KEY = 'typora-toc-width';
+  const resizer   = $('#toc-resizer');
+
+  function getCurrentWidth(){
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--toc-current-width').trim();
+    const n = parseFloat(v || '') || getPxVar('--toc-width', 280);
+    return n;
+  }
+  function setWidth(px, persist=true){
+    const minW = 220;
+    const maxW = Math.max(300, Math.floor(window.innerWidth * 0.6));
+    const w    = Math.max(minW, Math.min(maxW, px));
+    document.documentElement.style.setProperty('--toc-current-width', w + 'px');
+    if(persist){
+      try{ localStorage.setItem(WIDTH_KEY, String(w)); }catch(e){}
+    }
+  }
+  (function restoreWidth(){
+    if(window.innerWidth <= 1024) return;
+    const savedW = parseFloat(localStorage.getItem(WIDTH_KEY) || '') || 0;
+    if(savedW) setWidth(savedW, false);
+  })();
+
+  if(resizer){
+    let startX = 0, startW = 0, dragging = false;
+
+    function onPointerDown(e){
+      if(window.innerWidth <= 1024) return;
+      dragging = true;
+      startX    = e.clientX;
+      startW    = getCurrentWidth();
+      document.body.classList.add('resizing');
+      resizer.setPointerCapture?.(e.pointerId);
+      window.addEventListener('pointermove', onPointerMove, {passive:false});
+      window.addEventListener('pointerup', onPointerUp, {once:true});
+      e.preventDefault();
+    }
+    function onPointerMove(e){
+      if(!dragging) return;
+      const dx = e.clientX - startX;
+      setWidth(startW + dx, false);
+      e.preventDefault();
+    }
+    function onPointerUp(){
+      dragging = false;
+      document.body.classList.remove('resizing');
+      setWidth(getCurrentWidth(), true);
+      window.removeEventListener('pointermove', onPointerMove, {passive:false});
+    }
+
+    resizer.addEventListener('pointerdown', onPointerDown);
+
+    // 双击恢复默认宽度
+    resizer.addEventListener('dblclick', ()=>{
+      document.documentElement.style.removeProperty('--toc-current-width');
+      try{ localStorage.removeItem(WIDTH_KEY); }catch(e){}
+    });
+
+    // 键盘微调
+    resizer.addEventListener('keydown', (e)=>{
+      if(window.innerWidth <= 1024) return;
+      const step = e.shiftKey ? 40 : 10;
+      if(e.key === 'ArrowLeft'){
+        setWidth(getCurrentWidth() - step);
+        e.preventDefault();
+      }else if(e.key === 'ArrowRight'){
+        setWidth(getCurrentWidth() + step);
+        e.preventDefault();
+      }else if(e.key.toLowerCase() === 'r'){
+        document.documentElement.style.removeProperty('--toc-current-width');
+        try{ localStorage.removeItem(WIDTH_KEY); }catch(err){}
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('resize', ()=>{
+      if(window.innerWidth <= 1024){
+        document.documentElement.style.removeProperty('--toc-current-width');
+      }else{
+        const savedW = parseFloat(localStorage.getItem(WIDTH_KEY) || '') || 0;
+        if(savedW) setWidth(savedW, false);
+      }
+    }, {passive:true});
+  }
+
+  /* 初始 hash 高亮 */
+  if(location.hash){
+    activate(decodeURIComponent(location.hash.slice(1)));
+  }
+})();
+</script></body>
+</html>
